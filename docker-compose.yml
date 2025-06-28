@@ -1,10 +1,9 @@
 services:
-  
   linux:
-    container_name: base_linux
+    container_name: base_linux_uas
     image: ubuntu:24.04
   php:
-    container_name: webserver-wp
+    container_name: webserver-wp_uas
     build:
       context: .
       dockerfile: Dockerfile-php
@@ -16,7 +15,7 @@ services:
       - mysql
   mysql:
     image: mysql:8.4
-    container_name: mysql-wp
+    container_name: mysql-wp_uas
     environment:
       MYSQL_ROOT_PASSWORD: secret
       MYSQL_DATABASE: mydatabase
@@ -26,12 +25,12 @@ services:
       - mysql_data:/var/lib/mysql
   redis:
     image: redis:7.4
-    container_name: redis-wp
+    container_name: redis-wp_uas
     ports:
       - 6379:6379
 
   django:
-    container_name: prepare_lms
+    container_name: prepare_lms_uas
     build: .
     volumes:
       - ./code:/code
@@ -40,7 +39,7 @@ services:
     # command: sleep infinity
     command: python manage.py runserver 0.0.0.0:8000
   postgres:
-    container_name: prepare_db
+    container_name: prepare_db_uas
     image: postgres:16
     environment:
       - POSTGRES_DB=simple_lms
