@@ -1,6 +1,8 @@
 from ninja import Schema
-from typing import Optional
+from typing import Literal, Optional,List
 from datetime import datetime
+from pydantic import BaseModel
+from typing import List
 
 from django.contrib.auth.models import User
 
@@ -64,3 +66,40 @@ class CourseCommentOut(Schema):
 
 class CourseCommentIn(Schema):
     comment: str
+
+class RegisterIn(Schema):
+    username: str
+    password: str
+    email: str
+    first_name: str
+    last_name: str
+
+
+class RegisterOut(Schema):  # Ini harus cocok
+    id: int
+    username: str
+    email: str
+    first_name: str
+    last_name: str
+
+class CourseSchemaIn(Schema):
+    name: str
+    description: str
+    price: int
+
+
+class CourseAddIn(Schema):
+    name: str
+    description: str
+    price: int
+    teacher_id: int
+
+
+
+class StudentEnroll(BaseModel):
+    user_id: int
+    role: str
+
+class BatchEnrollIn(BaseModel):
+    course_id: int
+    students: List[StudentEnroll]

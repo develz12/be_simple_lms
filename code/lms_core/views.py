@@ -14,8 +14,8 @@ def testing(request):
 
 def addData(request): # jangan lupa menambahkan fungsi ini di urls.py
     course = Course(
-        name = "Belajar Django",
-        description = "Belajar Django dengan Mudah",
+        name = "Belajar Laravel",
+        description = "Belajar Laravel dengan Mudah",
         price = 1000000,
         teacher = User.objects.get(username="admin")
     )
