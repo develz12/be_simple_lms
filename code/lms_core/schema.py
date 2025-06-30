@@ -30,6 +30,9 @@ class CourseMemberOut(Schema):
     roles: str
     # created_at: datetime
 
+    # class Config:
+    #     orm_mode = True
+
 
 class CourseSchemaIn(Schema):
     name: str
@@ -64,6 +67,7 @@ class CourseCommentOut(Schema):
     created_at: datetime
     updated_at: datetime
 
+
 class CourseCommentIn(Schema):
     comment: str
 
@@ -75,7 +79,7 @@ class RegisterIn(Schema):
     last_name: str
 
 
-class RegisterOut(Schema):  # Ini harus cocok
+class RegisterOut(Schema): 
     id: int
     username: str
     email: str
@@ -95,11 +99,14 @@ class CourseAddIn(Schema):
     teacher_id: int
 
 
+class EnrollStudentIn(Schema):
+    user_id: List[int]
+    role: str = "std"
+    
+class EnrollStudentOut(BaseModel):
+    message: str
 
-class StudentEnroll(BaseModel):
-    user_id: int
-    role: str
 
-class BatchEnrollIn(BaseModel):
-    course_id: int
-    students: List[StudentEnroll]
+
+class ApproveCommentRequest(Schema):
+    comment_ids: List[int]

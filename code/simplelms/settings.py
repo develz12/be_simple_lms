@@ -37,7 +37,8 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    'lms_core',  # Your LMS core application
+    'lms_core',  # Your LMS core applicatio
+    'ninja_jwt',  # Your mobile application
 ]
 
 MIDDLEWARE = [
