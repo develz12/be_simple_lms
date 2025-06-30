@@ -110,3 +110,34 @@ class EnrollStudentOut(BaseModel):
 
 class ApproveCommentRequest(Schema):
     comment_ids: List[int]
+
+class CourseContentIn(Schema):
+    name: str
+    description: str
+    scheduled_start_time: Optional[datetime] = None
+    scheduled_end_time: Optional[datetime] = None
+
+class AnnouncementIn(Schema):
+    title: str
+    content: str
+    start_date: datetime
+    end_date: datetime
+    course_id: Optional[int] = None
+
+class AnnouncementOut(Schema):
+    id: int
+    title: str
+    content: str
+    start_date: datetime
+    end_date: datetime
+    created_at: datetime
+    updated_at: datetime
+
+class CategoryIn(Schema):
+    name:str
+
+class CategoryOut(Schema):
+    id: int
+    name: str
+    created_by_id: Optional[int] = None
+    created_at: datetime

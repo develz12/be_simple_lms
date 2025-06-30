@@ -1,13 +1,12 @@
 from typing import List
-from django.shortcuts import get_object_or_404
 from ninja import NinjaAPI
 from lms_core.schema import (
-    ApproveCommentRequest, CourseSchemaOut, CourseMemberOut, CourseSchemaIn,
+    ApproveCommentRequest, CategoryIn, CourseContentIn, CourseSchemaOut, CourseMemberOut, CourseSchemaIn,
     CourseContentMini, CourseContentFull,
     CourseCommentOut, CourseCommentIn, EnrollStudentIn,
-    RegisterIn, CourseAddIn, EnrollStudentOut
+    RegisterIn, CourseAddIn
 )
-from lms_core.models import Course, CourseMember, CourseContent, Comment
+from lms_core.models import Category, Course, CourseMember, CourseContent, Comment
 from ninja_simple_jwt.auth.views.api import mobile_auth_router
 from ninja_simple_jwt.auth.ninja_auth import HttpJwtAuth
 from django.contrib.auth.models import User
@@ -15,11 +14,17 @@ from django.contrib.auth import get_user_model
 from lms_core.custom_jwt import CustomJWTAuth
 from ninja_jwt.authentication import JWTAuth
 from ninja.responses import Response
-from lms_core.models import CourseContent, Comment, Course
+from lms_core.models import CourseContent, Comment, Course,Announcement
 from lms_core.schema import CourseCommentOut
 from ninja import Schema
 from typing import List
 from ninja.throttling import AnonRateThrottle, AuthRateThrottle
+from lms_core.throttles import CommentThrottle, CourseCreateThrottle, RegisterThrottle
+from lms_core.throttles import ContentCreateThrottle
+from lms_core.schema import AnnouncementIn,CategoryOut
+from lms_core.models import Course, Announcement, CourseMember
+from lms_core.schema import AnnouncementOut
+from typing import List
 
 
 apiv1 =  NinjaAPI(
@@ -31,7 +36,7 @@ apiv1.add_router("/auth/", mobile_auth_router)
 apiAuth = HttpJwtAuth()
 
 
-@apiv1.post("/auth/register", response={201: dict, 400: dict})
+@apiv1.post("/auth/register",throttle=RegisterThrottle(), response={201: dict, 400: dict})
 def register_user(request, data: RegisterIn):
     if User.objects.filter(username=data.username).exists():
         return 400, {"error": "Username sudah digunakan"}
@@ -49,7 +54,7 @@ def register_user(request, data: RegisterIn):
     return 201, {"message": "Pendaftaran berhasil", "user_id": user.id}
 
 
-@apiv1.post("/course/add", auth=apiAuth, response=CourseSchemaOut)
+@apiv1.post("/course/add",throttle=CourseCreateThrottle(), auth=apiAuth, response=CourseSchemaOut)
 def add_course(request, data: CourseAddIn):
     user = request.user
     course = Course.objects.create(
@@ -114,7 +119,7 @@ def enroll_course(request, course_id: int, data: EnrollStudentIn):
     }
 
 
-@apiv1.post("/contents/{content_id}/comments", auth=apiAuth, response={201: CourseCommentOut})
+@apiv1.post("/contents/{content_id}/comments",throttle=CommentThrottle(), auth=apiAuth, response={201: CourseCommentOut})
 def create_content_comment(request, content_id: int, data: CourseCommentIn):
     user = User.objects.get(id=request.user.id)
     content = CourseContent.objects.get(id=content_id)
@@ -132,8 +137,6 @@ def create_content_comment(request, content_id: int, data: CourseCommentIn):
     )
     comment.save()
     return 201, comment
-
-
 
 
 
@@ -158,7 +161,6 @@ def approve_comments(request, content_id: int, data: ApproveCommentRequest):
         content_id=content
     ).update(is_approved=True)
 
-    # Ambil kembali yang sudah disetujui
     approved_comments = Comment.objects.filter(
         id__in=data.comment_ids,
         content_id=content,
@@ -171,3 +173,126 @@ def approve_comments(request, content_id: int, data: ApproveCommentRequest):
 def list_content_course(request, course_id: int):
     contents = CourseContent.objects.filter(course_id=course_id)
     return contents
+
+
+@apiv1.post(
+    "/courses/{course_id}/contents",throttle=ContentCreateThrottle(),
+    auth=apiAuth,
+    response={201: dict, 403: dict}
+)
+def add_content_course(request, course_id: int, data: CourseContentIn):
+    user = request.user.id
+    course = Course.objects.get(id=course_id)
+
+    if course.teacher_id != user:
+        return 403, {"error": "You are not allowed to add content in this course"}
+
+    content = CourseContent.objects.create(
+        name=data.name,
+        description=data.description,
+        course_id=course 
+    )
+    return 201, {"message": "successfully add content"}
+
+@apiv1.post("/courses/{course_id}/announcements", auth=apiAuth,response={201:dict,403:dict})
+def create_annoncement(request, course_id:int, data: AnnouncementIn):
+    user = request.user.id
+    course = Course.objects.get(id=course_id)
+    if course.teacher_id != user:
+        return 403, {"error": "You are not allowed because you are not the teacher of this course"}
+    
+    announcement = Announcement.objects.create (
+        title=data.title,
+        content=data.content,
+        course=course,
+        start_date=data.start_date,
+        end_date=data.end_date,
+        created_by=get_user_model().objects.get(id=user),
+    )
+    announcement.save()
+    return 201, {"message": "Announcement created successfully", "announcement_id": announcement.id}
+
+
+
+@apiv1.get(
+    "/courses/{course_id}/announcements",auth=apiAuth,
+    response={200: List[AnnouncementOut], 404: dict}
+)
+def list_announcements(request, course_id: int):
+
+    user = getattr(request, "auth", None)
+    print (f"User: {user}")
+    announcements = Announcement.objects.filter(course_id=course_id)
+    return list(announcements)
+
+@apiv1.put(
+    "/courses/{course_id}/announcements/{announcement_id}",
+    auth=apiAuth,
+    response={200: AnnouncementOut, 403: dict, 404: dict}
+)
+def update_announcement(request, course_id: int, announcement_id: int, data: AnnouncementIn):
+    user = request.user.id
+
+    # Cek apakah course ada
+    try:
+        course = Course.objects.get(id=course_id)
+    except Course.DoesNotExist:
+        return 404, {"error": "Course not found"}
+
+    # Hanya teacher dari course tersebut yang boleh edit
+    if course.teacher_id != user:
+        return 403, {"error": "You are not allowed to update this announcement"}
+
+    # Cek apakah announcement milik course tersebut
+    try:
+        announcement = Announcement.objects.get(id=announcement_id, course_id=course_id)
+    except Announcement.DoesNotExist:
+        return 404, {"error": "Announcement not found"}
+
+    # Update datanya
+    announcement.title = data.title
+    announcement.content = data.content
+    announcement.start_date = data.start_date
+    announcement.end_date = data.end_date
+    announcement.save()
+
+    return 200, announcement
+
+@apiv1.delete(
+    "/courses/{course_id}/announcements/{announcement_id}",
+    auth=apiAuth,
+    response={200: dict, 403: dict, 404: dict}
+)
+def delete_announcement(request, course_id: int, announcement_id: int):
+    user_id = request.user.id
+
+    # Cek apakah course ada
+    try:
+        course = Course.objects.get(id=course_id)
+    except Course.DoesNotExist:
+        return 404, {"error": "Course not found"}
+
+    # Cek apakah user adalah teacher dari course tersebut
+    if course.teacher_id != user_id:
+        return 403, {"error": "You are not allowed to delete this announcement"}
+
+    # Cek apakah announcement ada dan milik course
+    try:
+        announcement = Announcement.objects.get(id=announcement_id, course_id=course_id)
+    except Announcement.DoesNotExist:
+        return 404, {"error": "Announcement not found"}
+
+    # Hapus announcement
+    announcement.delete()
+    return 200, {"message": "Announcement deleted successfully"}
+
+@apiv1.post("/categories/", auth=apiAuth, response={201: CategoryOut, 400: dict})
+def add_category(request, data: CategoryIn):
+    user = request.user
+    if not user.is_staff:
+        return 400, {"error": "Only teachers can add categories."}
+    
+    category = Category.objects.create(name=data.name, created_by=user)
+    return 201, category
+
+
