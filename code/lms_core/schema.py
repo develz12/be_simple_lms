@@ -213,10 +213,58 @@ class ContentUpdateSchema(Schema):
 class CourseOut(Schema):
     id: int
     name: str
-    
+
 class ContentOut(Schema):
     id: int
     name: str
     description: str
     is_published: bool
     course_id: CourseOut  # ✅ Ganti dari `course` ke `course_id`
+
+class EnrollStudentIn(Schema):
+    user_id: List[int]
+    role: str = "std"
+
+class EnrollStudentOut(Schema):
+    message: str
+class EnrollStudentIn(Schema):
+    user_id: List[int]
+    role: str = "std"
+
+class EnrollStudentOut(Schema):
+    message: str
+
+class CourseAnalyticsOut(Schema):
+    course_id: int
+    course_name: str
+    members_count: int
+    contents_count: int
+    comments_count: int
+    feedback_count: int
+
+class UserProfileOut(Schema):
+    id: int
+    first_name: str
+    last_name: str
+    email: str
+    handphone: Optional[str]
+    description: Optional[str]
+    profile_picture: Optional[str]
+    courses_created: list[CourseContentMini]
+    courses_joined: list[CourseContentFull]
+
+class CompletionTrackingCreateSchema(Schema):
+    student_username: str  
+    content_id: int
+    course_id: int
+    
+    
+class CompletionTrackingResponseSchema(Schema):
+    content_name: str  
+    completed_at: datetime  
+    completed: bool
+
+class CompletionTrackingResponseSchema(Schema):
+    content_name: str  
+    completed_at: datetime  
+    completed: bool

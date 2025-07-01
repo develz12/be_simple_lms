@@ -1,13 +1,16 @@
+from django.utils import timezone
 from typing import List
+from django.http import JsonResponse
 from django.shortcuts import get_object_or_404
 from ninja import NinjaAPI
 from lms_core.schema import (
-    ApproveCommentRequest, BookmarkOut, CategoryIn, CompletionOut, ContentOut, ContentUpdateSchema, CourseContentIn, CourseSchemaOut, CourseMemberOut, CourseSchemaIn,
+    ApproveCommentRequest, BookmarkOut, CategoryIn, CompletionOut, CompletionTrackingCreateSchema, CompletionTrackingResponseSchema, ContentOut, ContentUpdateSchema, CourseAnalyticsOut, CourseContentIn, CourseSchemaOut, CourseMemberOut, CourseSchemaIn,
     CourseContentMini, CourseContentFull,
-    CourseCommentOut, CourseCommentIn, EnrollStudentIn, FeedbackIn, FeedbackOut,
-    RegisterIn, CourseAddIn
+    CourseCommentOut, CourseCommentIn, EnrollStudentIn, EnrollStudentOut, FeedbackIn, FeedbackOut,
+    RegisterIn, CourseAddIn, UserProfileOut
 )
-from lms_core.models import Category, ContentBookmark, ContentCompletion, Course, CourseFeedback, CourseMember, CourseContent, Comment
+from ninja.errors import HttpError
+from lms_core.models import Category, CompletionTracking, ContentBookmark, ContentCompletion, Course, CourseFeedback, CourseMember, CourseContent, Comment
 from django.contrib.auth.models import AnonymousUser
 from ninja_simple_jwt.auth.views.api import mobile_auth_router
 from ninja_simple_jwt.auth.ninja_auth import HttpJwtAuth
@@ -358,3 +361,63 @@ def get_course_contents(request, course_id: int):
 
     return queryset
 
+@apiv1.post("/add-completion/", auth=apiAuth)
+def add_completion_tracking(request, data: CompletionTrackingCreateSchema):
+    student_username = data.student_username  
+    try:
+        student = User.objects.get(username=student_username)
+    except User.DoesNotExist:
+        return JsonResponse({"detail": "User not found"}, status=404)
+
+    content = get_object_or_404(CourseContent, id=data.content_id)
+
+    completion, created = CompletionTracking.objects.update_or_create(
+        student=student,
+        content=content,
+        defaults={'completed': True, 'completed_at': timezone.now()}
+    )
+
+    return JsonResponse({
+        "student_username": student.username,
+        "content_id": content.id,
+        "completed": completion.completed,
+        "completed_at": completion.completed_at,
+    }, status=200)
+
+
+@apiv1.get("/show-completion/", auth=apiAuth, response=CompletionTrackingResponseSchema)
+def show_completion(request, course_id: int):
+    course = get_object_or_404(Course, id=course_id)
+    course_contents = CourseContent.objects.filter(course_id=course.id)
+
+    completions = CompletionTracking.objects.filter(content__in=course_contents)
+
+    completion_data = []
+    for completion in completions:
+        completion_data.append({
+            "student_id": completion.student.id,
+            "student_username": completion.student.username,
+            "content_id": completion.content.id,
+            "content_name": completion.content.name,
+            "completed": completion.completed,
+            "completed_at": completion.completed_at,
+        })
+
+    return JsonResponse({
+        "course_id": course.id,
+        "completions": completion_data
+    }, status=200)
+
+
+@apiv1.delete("/delete-completion/", auth=apiAuth)
+def delete_completion(request, student_id: int, content_id: int):
+    student = get_object_or_404(User, id=student_id)
+    
+    completion = CompletionTracking.objects.filter(student=student, content_id=content_id).first()
+    
+    if not completion:
+        return JsonResponse({"error": "Completion not found for this student and content."}, status=404)
+
+    completion.delete()
+    
+    return JsonResponse({"message": "Completion successfully deleted."}, status=200)

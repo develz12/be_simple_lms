@@ -38,6 +38,17 @@ class Course(models.Model):
     
 ROLE_OPTIONS = [('std', "Siswa"), ('ast', "Asisten")]
 
+
+class UserProfile(models.Model):
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="profile")
+    handphone = models.CharField(max_length=20, null=True, blank=True)
+    description = models.TextField(null=True, blank=True)
+    profile_picture = models.ImageField(upload_to="profile/", null=True, blank=True)
+
+    def __str__(self):
+        return self.user.username
+
+
 class CourseMember(models.Model):
     course_id = models.ForeignKey(Course, verbose_name="matkul", on_delete=models.RESTRICT)
     user_id = models.ForeignKey(User, verbose_name="siswa", on_delete=models.RESTRICT)
@@ -201,3 +212,15 @@ class ContentBookmark(models.Model):
 
     def __str__(self):
         return f"{self.user.username} bookmarked {self.content.name}"
+
+class CompletionTracking(models.Model):
+    student = models.ForeignKey(User, on_delete=models.CASCADE)
+    content = models.ForeignKey(CourseContent, on_delete=models.CASCADE)
+    completed = models.BooleanField(default=False)
+    completed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        unique_together = ('student', 'content')
+
+    def __str__(self):
+        return f"{self.student.username} - {self.content.name} - Completed: {self.completed}"
