@@ -66,6 +66,7 @@ class CourseContent(models.Model):
     course_id = models.ForeignKey(
         "Course", verbose_name="Mata Kuliah", on_delete=models.RESTRICT
     )
+    is_published = models.BooleanField(default=False, verbose_name="Sudah Dipublikasikan")
 
     parent_id = models.ForeignKey(
         "self", verbose_name="Induk Konten", on_delete=models.RESTRICT, null=True, blank=True
@@ -168,3 +169,35 @@ class Category(models.Model):
     class Meta:
         verbose_name = "Kategori"
         verbose_name_plural = "Kategori"
+
+class CourseFeedback(models.Model):
+    member = models.ForeignKey(
+        CourseMember,
+        verbose_name="Anggota Kursus",
+        on_delete=models.CASCADE,
+        related_name="course_feedbacks"
+    )
+    feedback = models.TextField("Umpan Balik")
+    created_at = models.DateTimeField("Dibuat pada", auto_now_add=True)
+    updated_at = models.DateTimeField("Diperbarui pada", auto_now=True)
+
+    class Meta:
+        verbose_name = "Umpan Balik"
+        verbose_name_plural = "Umpan Balik"
+        unique_together = ('member',)
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"Feedback dari {self.member.user_id.username} untuk {self.member.course_id.name}"
+
+class ContentBookmark(models.Model):
+    content = models.ForeignKey(CourseContent, on_delete=models.CASCADE, related_name="bookmarks")
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="content_bookmarks")
+    bookmarked_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ('content', 'user')
+        ordering = ['-bookmarked_at']
+
+    def __str__(self):
+        return f"{self.user.username} bookmarked {self.content.name}"

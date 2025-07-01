@@ -134,10 +134,89 @@ class AnnouncementOut(Schema):
     updated_at: datetime
 
 class CategoryIn(Schema):
-    name:str
+    name: str
 
 class CategoryOut(Schema):
     id: int
     name: str
     created_by_id: Optional[int] = None
     created_at: datetime
+
+class FeedbackIn(Schema):
+    feedback: str
+
+class FeedbackOut(Schema):
+    id: int
+    course_id: int
+    user_id: int
+    feedback: str
+    created_at: str
+    updated_at: str    
+
+class CompletionIn(Schema):
+    content_id: int
+
+class CompletionOut(Schema):
+    id: int
+    content_id: int
+    content_name: str
+    course_id: int
+    course_name: str
+    completed_at: datetime
+    user: UserOut  # Using your existing UserOut schema
+
+    @staticmethod
+    def from_orm(completion):
+        return CompletionOut(
+            id=completion.id,
+            content_id=completion.content.id,
+            content_name=completion.content.name,
+            course_id=completion.content.course_id.id,
+            course_name=completion.content.course_id.name,
+            completed_at=completion.completed_at,
+            user=UserOut.from_orm(completion.user)
+        )
+
+class CompletionStatsOut(Schema):
+    total_contents: int
+    completed: int
+    progress: float
+
+    @staticmethod
+    def create(total: int, completed: int):
+        return CompletionStatsOut(
+            total_contents=total,
+            completed=completed,
+            progress=round((completed / total) * 100, 2) if total > 0 else 0
+        )
+    
+class CourseOut(Schema):
+    id: int
+    name: str
+
+class ContentOut(Schema):
+    id: int
+    name: str
+    description: str
+    course: CourseOut
+
+class BookmarkOut(Schema):
+    id: int
+    bookmarked_at: datetime
+    content: ContentOut
+
+class ContentUpdateSchema(Schema):
+    name: str | None = None
+    description: str | None = None
+    is_published: bool | None = None
+
+class CourseOut(Schema):
+    id: int
+    name: str
+    
+class ContentOut(Schema):
+    id: int
+    name: str
+    description: str
+    is_published: bool
+    course_id: CourseOut  # ✅ Ganti dari `course` ke `course_id`

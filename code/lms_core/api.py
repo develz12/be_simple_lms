@@ -1,18 +1,19 @@
 from typing import List
+from django.shortcuts import get_object_or_404
 from ninja import NinjaAPI
 from lms_core.schema import (
-    ApproveCommentRequest, CategoryIn, CourseContentIn, CourseSchemaOut, CourseMemberOut, CourseSchemaIn,
+    ApproveCommentRequest, BookmarkOut, CategoryIn, CompletionOut, ContentOut, ContentUpdateSchema, CourseContentIn, CourseSchemaOut, CourseMemberOut, CourseSchemaIn,
     CourseContentMini, CourseContentFull,
-    CourseCommentOut, CourseCommentIn, EnrollStudentIn,
+    CourseCommentOut, CourseCommentIn, EnrollStudentIn, FeedbackIn, FeedbackOut,
     RegisterIn, CourseAddIn
 )
-from lms_core.models import Category, Course, CourseMember, CourseContent, Comment
+from lms_core.models import Category, ContentBookmark, ContentCompletion, Course, CourseFeedback, CourseMember, CourseContent, Comment
+from django.contrib.auth.models import AnonymousUser
 from ninja_simple_jwt.auth.views.api import mobile_auth_router
 from ninja_simple_jwt.auth.ninja_auth import HttpJwtAuth
 from django.contrib.auth.models import User
 from django.contrib.auth import get_user_model
 from lms_core.custom_jwt import CustomJWTAuth
-from ninja_jwt.authentication import JWTAuth
 from ninja.responses import Response
 from lms_core.models import CourseContent, Comment, Course,Announcement
 from lms_core.schema import CourseCommentOut
@@ -25,6 +26,7 @@ from lms_core.schema import AnnouncementIn,CategoryOut
 from lms_core.models import Course, Announcement, CourseMember
 from lms_core.schema import AnnouncementOut
 from typing import List
+from ninja.errors import AuthenticationError
 
 
 apiv1 =  NinjaAPI(
@@ -266,33 +268,93 @@ def update_announcement(request, course_id: int, announcement_id: int, data: Ann
 def delete_announcement(request, course_id: int, announcement_id: int):
     user_id = request.user.id
 
-    # Cek apakah course ada
     try:
         course = Course.objects.get(id=course_id)
     except Course.DoesNotExist:
         return 404, {"error": "Course not found"}
 
-    # Cek apakah user adalah teacher dari course tersebut
     if course.teacher_id != user_id:
         return 403, {"error": "You are not allowed to delete this announcement"}
 
-    # Cek apakah announcement ada dan milik course
     try:
         announcement = Announcement.objects.get(id=announcement_id, course_id=course_id)
     except Announcement.DoesNotExist:
         return 404, {"error": "Announcement not found"}
 
-    # Hapus announcement
     announcement.delete()
     return 200, {"message": "Announcement deleted successfully"}
 
-@apiv1.post("/categories/", auth=apiAuth, response={201: CategoryOut, 400: dict})
-def add_category(request, data: CategoryIn):
-    user = request.user
-    if not user.is_staff:
-        return 400, {"error": "Only teachers can add categories."}
-    
-    category = Category.objects.create(name=data.name, created_by=user)
-    return 201, category
 
+@apiv1.post("/courses/{course_id}/bookmark", auth=apiAuth, response={201: dict, 403: dict, 404: dict})
+def bookmark_course(request, course_id: int):
+    user = request.user
+    try:
+        course = Course.objects.get(id=course_id)
+    except Course.DoesNotExist:
+        return 404, {"error": "Course not found"}
+
+    if not course.is_member(user):
+        return 403, {"error": "You are not authorized to bookmark this course"}
+
+    if user in course.bookmarked_by.all():
+        return 400, {"error": "You have already bookmarked this course"}
+
+    course.bookmarked_by.add(user)
+    return 201, {"message": "Course bookmarked successfully"}
+
+@apiv1.post("/content/{content_id}/bookmark", auth=apiAuth, response={200: dict, 401: dict})
+def add_bookmark(request, content_id: int):
+    user = request.user.id
+
+    try:
+        content = CourseContent.objects.get(id=content_id)
+    except CourseContent.DoesNotExist:
+        return 400, {"error": "Content not found"}
+
+    bookmark, created = ContentBookmark.objects.get_or_create(
+        content=content,
+        user=user  # Jika pakai ForeignKey
+    )
+
+    return {"message": "Bookmark added", "bookmark_id": bookmark.id}
+
+@apiv1.get("/bookmark", response={200: list[BookmarkOut], 401: dict})
+def get_bookmarks(request):
+    user = request.user
+    if not user.is_authenticated:
+        return 401, {"detail": "Unauthorized"}
+
+    bookmarks = ContentBookmark.objects.select_related("content__course_id").filter(user=user)
+    return 200, bookmarks
+
+@apiv1.put("/content/{content_id}", auth=apiAuth, response={200: dict, 403: dict, 404: dict})
+def update_content(request, content_id: int, data: ContentUpdateSchema):
+    user = request.user
+
+    try:
+        content = CourseContent.objects.select_related('course_id').get(id=content_id)
+    except CourseContent.DoesNotExist:
+        return 404, {"detail": "Content not found"}
+
+    if content.course_id.teacher_id != user.id:
+        return 403, {"detail": "You are not the teacher of this course"}
+
+    for attr, value in data.dict(exclude_none=True).items():
+        setattr(content, attr, value)
+    content.save()
+
+    return {"detail": "Content updated successfully"}
+
+
+@apiv1.get("/course/{course_id}/contents", response=list[ContentOut])
+def get_course_contents(request, course_id: int):
+    user = request.user.id
+    course = Course.objects.get(id=course_id)
+
+    queryset = CourseContent.objects.select_related("course_id").filter(course_id=course)
+
+    if course.teacher_id != user:
+        queryset = queryset.filter(is_published=True)
+
+    return queryset
 
